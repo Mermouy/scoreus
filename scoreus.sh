@@ -18,8 +18,9 @@
 # | Fifth Floor, Boston, MA  02110-1301  USA
 # +------------------------------------------------------------+
 # Simple bash + yad application to record and stat your boardgames scoring sessions
+
 mini_changelog="Nothing works for now, just playing with yad widgets...
-then will have a look at sqlite integration"
+slowly working on sqlite integration"
 ## Variables
 Author="MerMouY"
 Licence="<a href=\"http://gpl3.org\">GPL 3</a>"
@@ -29,15 +30,19 @@ AppName="Scoreus"
 # scoreus_warning="$img_path/warning.png"
 Cat_list="Fast!Bit less than an hour!Between 1 and 2 Hours!Evening!All night long"
 Sub_cat_list="Cartes!Ouvriers!Management"
-scoreus_error="gtk-error"
-scoreus_warning="gtk-warning"
-scoreus_ok="/home/mermouy/Images/scoreus/scoreus_logo.png"
 Db_path="$HOME/.scoreus"
 img_path="$Db_path/images"
+scoreus_error="gtk-error"
+scoreus_warning="gtk-warning"
+scoreus_ok="$img_path/valid_16p.png"
+scoreus_img="$img_path/scoreus.png"
 ##test variables
 DIALOG=`which yad`
-
-GuiName="--title=Scoreus --center --window-icon=$scoreus_error --name=Scoreus --class=Scoreus --selectable-labels --image-path=\"$img_path\""
+Db="$Db_path/scoreus.sqlite"
+Game_default="$Db_path/uploads/games/default"
+Player_default="$Db_path/uploads/images/avatars"
+GuiName="--title=Scoreus --center --window-icon=$scoreus_img --name=Scoreus --class=Scoreus --selectable-labels --image-path=\"$img_path\""
+CDATE=`date +"%Y-%m-%d-%H:%M:%S"`
 
 
 ### Functions
@@ -67,40 +72,157 @@ function add_player_ui()
 player_data=($($DIALOG $GuiName --form --text="<span size=\"x-large\"><b>Add a new player to the database: </b></span>" \
 	--always-print-result --separator=" " \
 	--field="Player Name: " Name \
-	--field="Avatar (local file): ":fl $HOME \
+	--field="Avatar (preferably square form): ":fl $HOME \
 	--field="If your image is not already on this computer\nCheck this to upload it now.":chk FALSE \
 	--field="Website: " "http://yourwebsite.com" \
 	--field="Email address: " "you@yourmail.com" \
 	--field="<b><u>Player should be considered as: </u></b>":lbl \
 	--field="Games admin: ":chk false \
 	--field="Players admin: ":chk false \
-	--field="Games owned: ":txt))
+	--field="Games owned: ":txt \
+	--quoted-output))
 	if [ "$?" = "0" ]
 		then
-		p_name=${player_data[0]}
-		p_avatar=${player_data[1]}
-		p_website=${player_data[3]}
-		p_http="<a href=\"$p_website\">Website of \"$p_name\"</a>"
-		p_email=${player_data[4]}
-		p_mailto="<a href=\"mailto:$p_email\">\"$p_name\"</a>"
-		p_game_admin=${player_data[5]}
-		p_players_admin=${player_data[6]}
-		p_owned=${player_data[7]}
-		if [ "$player_data[5]" = "true" ] && [ "$player_data[6]" = "true" ]
-			then p_powers="Super admin powers\!"
-		elif [ "$player_data[5]" = "true" ] && [ "$player_data[6]" = "false" ]
-			then p_powers="Games admin status"
-		elif [ "$player_data[5]" = "false" ] && [ "$player_data[6]" = "true" ]
-			then p_powers="Players admin status"
-		fi
-		player_data_record=$($DIALOG $GuiName --text="<b>Verify entered data to avoid any mistake.</b>\n\nIf you agree with these data, click \"<i>Insert</i>\" button.\n\n\n<i>Player avatar should be displayed on the left.</i>\n\n<small>	Or there was an error with upload/selection.</small>\n\n<b>Player Name:</b> <span color=\"blue\">$p_name</span>\n\n<b>Player Website: </b><span color=\"blue\">$p_http</span>\n\n<b>Player email address: </b><span color=\"blue\">$p_email</span>\n\n<b>$p_name will have $p_powers</b>\n\n<b>And finally some part of his life: </b><span color=\"blue\">\"$p_bio\"</span>" --button="Insert":0 --button=Cancel:1 --image="$p_avatar")
+ 		p_name=`echo ${player_data[0]} | sed "s/'//g"`
+ 		p_avatar=`echo ${player_data[1]} | sed "s/'//g"`
+ 		p_website=`echo ${player_data[3]} | sed "s/'//g"`
+		p_http="<a href=${player_data[3]}>Website of $p_name</a>"
+ 		p_email=`echo ${player_data[4]} | sed "s/'//g"`
+		p_mailto="<a href=\"mailto:$p_email\">$p_name</a>"
+ 		p_game_admin=`echo ${player_data[6]} | sed "s/'//g"`
+ 		p_players_admin=`echo ${player_data[7]} | sed "s/'//g"`
+ 		p_owned=`echo ${player_data[8]} | sed "s/'//g"`
+ 		case $p_game_admin in
+ 			TRUE)
+ 				if [ "$p_players_admin" = "TRUE" ]
+ 					then
+ 					p_powers="Full admin"
+				else
+					p_powers="Game admin"
+				fi
+			;;
+			FALSE)
+				if [ "$p_players_admin" = "TRUE" ]
+					then
+					p_powers="Players admin"
+				else
+					p_powers="Not an admin"
+				fi
+			;;
+		esac
+		Dir_name="$(dirname "$p_avatar")/"
+		filename=`echo ${p_avatar%%.*} | sed "s|$Dir_name||"`
+		convert "$p_avatar" -resize 256x\> "/tmp/$filename.png"
+		mogrify -resize x256\> "/tmp/$filename.png"
+		p_avatar="$Player_default/$filename.png"
+		echo -e "$p_owned" | $DIALOG $GuiName --text-info --text="<b>Verify entered data to avoid any mistake.</b>\n\n \
+If you agree with these data, click \"<i>Insert</i>\" button.\n\n\n \
+	<i>Player avatar should be displayed on the left.</i>\n\n \
+	<small>	Or there was an error with upload/selection.</small>\n\n \
+		<b>Player Name: </b><span color=\"blue\">$p_name</span>\n\n  \
+		<b>Player Website: </b><span color=\"blue\">$p_http</span>\n\n \
+		<b>Player email address: </b><span color=\"blue\">$p_mailto</span>\n\n \
+		<b>$p_name will be: </b><span color=\"blue\">$p_powers</span>\n\n \
+		<b>And finally some his games: </b>" \
+		--button=Insert:0 --button=Cancel:1 --image=/tmp/$filename.png
 		if [ "$?" = "0" ]
 			then
-			echo "on y va"
-		else exit 1
+			cp "/tmp/$filename.png" "$p_avatar"
+			player_data_2insert="0001,DATETIME('NOW'),${player_data[0]},$p_avatar,${player_data[3]},${player_data[4]},${player_data[5]},${player_data[6]}"
+			sqlite3 $Db "insert into players ( p_created,p_name,p_avatar,p_website,p_email,p_game_admin,p_players_admin ) \
+			values ( DATETIME('NOW'),${player_data[0]},'$p_avatar',${player_data[3]},${player_data[4]},${player_data[6]},${player_data[7]} );"  || message error "Unable to record \"$player_data_2insert\" in \"$Db\""
+			echo $(sqlite3 $Db "select * from players" ;)
 		fi
-	else exit 1
+	else rm -f "/tmp/$filename" 2>/dev/null && exit 1
 	fi
+}
+
+function squery()
+{
+sqlite3 $Db "select $p_name from $1 limit 1";
+}
+
+function search_ui()
+{
+p_search=$($DIALOG $GuiName --text="Search by: " --list \
+--column="Choose: " --column="Search by: " --print-column=2 \
+--limit=20 --listen --separator="" --radiolist \
+TRUE Name FALSE Email FALSE 'Games Admin' FALSE 'Players Admin' \
+--width=200 --height=250 --title="Scoreus Search" --no-headers --text-align=center)
+if [ $? = 1 ]
+	then
+	exit 1
+fi
+
+case $p_search in
+	"Name")
+		player_name_query(){
+			sqlite3 $Db "select $1 from players where p_name=\"$2\"";
+		}
+		p_name=$($DIALOG $GuiName --text="Enter Player Name to search :" --entry --entry-text=Name)
+			if [ $? != 0 ]
+				then
+				exit 1
+			fi
+		p_query=$($DIALOG $GuiName --text="Choose what to display: " --list --radiolist \
+--width=250 --height=250 --title="Scoreus Search" --no-headers --text-align=center \
+TRUE "Email" FALSE "Is A Game Admin" FALSE "Is a Players Admin" FALSE "Show Player Avatar" FALSE "Everything" \
+--print-column 2 --column="Choose :" --column="Display :" --separator="")
+			case $p_query in
+				"Email")
+					player_name_query p_email "$p_name" | $DIALOG $GuiName --text="Search results: " --text-info --button=Quit:0 --width=200 && exit 0
+					;;
+				"Is A Game Admin")
+					Ishe=$(player_name_query p_game_admin "$p_name" | sed 's/TRUE/Is/;s/FALSE/is not/')
+					$DIALOG $GuiName --text="<big><b>$p_name <span color=\"red\">$Ishe</span> a Game Admin</b></big>" --button=Quit:0 --width=200 && exit 0
+					;;
+				"Is a Players Admin")
+					Ishe=$(player_name_query p_players_admin "$p_name" | sed 's/TRUE/Is/;s/FALSE/is not/')
+					$DIALOG $GuiName --text="<b><big>$p_name <span color=\"red\">$Ishe</span> a Player Admin</big></b>" --button=Quit:0 --width=200 && exit 0
+					;;
+				"Show Player Avatar")
+					Avatar=$(player_name_query p_avatar "$p_name")
+					$DIALOG $GuiName --title="$p_name\'s Avatar" --image=$Avatar --button=Quit:1 --width=280
+					exit 0
+					;;
+				"Everything")
+					EveryThing=( $(player_name_query "*" "$p_name" | sed 's/|/\n/g') )
+					echo -e ${EveryThing[*]} | sed 's/ /\n/g' | $DIALOG $GuiName --list --listen --column=id --column="Creation Date" --column="Creation Time" --column="Player Name" --column="Player Avatar" --column="Player Website" --column="Player Email" --column="Is a Game Admin":chk --column="Is a Player Admin":chk --button=Cancel:1 --button=See:0
+					if [ $? = 0 ]
+						then
+						 echo $(sqlite3 $Db 'select p_owned from players where p_name="$p_name";') | $DIALOG $GuiName --text-info --text="<b>Here is ${EveryThing[3]}.</b>\n\n \
+<i>Player avatar should be displayed on the left.</i>\n\n \
+<small>	Or there was an error with upload/selection.</small>\n\n \
+<b>Player Website: </b><span color=\"blue\">${EveryThing[5]}</span>\n\n \
+<b>Player email address: </b><span color=\"blue\">${EveryThing[6]}</span>\n\n \
+<b>${EveryThing[3]} is Game Admin: </b><span color=\"blue\">${EveryThing[7]}</span>\n\n \
+<b>${EveryThing[3]} is Player Admin: </b><span color=\"blue\">${EveryThing[8]}</span>\n\n \
+<b>And finally some of his games: </b>" \
+--button=Quit:1 --image=${EveryThing[4]}
+					else exit 0
+					fi
+					exit 0
+					;;
+			esac
+		;;
+	"Email")
+		p_mail=$($DIALOG --text="Enter Player Email" --entry --entry-text=player@mail.com)
+		s_query=$(sqlite3 $Db "select p_email from players where p_name=\"$p_name\""; )
+		exit 0
+		;;
+	"Games Admin")
+		player_query * TRUE | $DIALOG $GuiName --text-info
+		exit 0
+		;;
+	"Players Admin")
+		echo "All Players Admins"
+		exit 0
+		;;
+	"*")
+		message error "No search with this argument"
+		exit 1
+		;;
+esac
 }
 
 function add_play_ui()
@@ -123,7 +245,7 @@ g_data=($($DIALOG $GuiName --title="Scoreus Add Game" --text="<span size=\"x-lar
 --field="If your image is not already on this computer\nCheck this to upload it now.":chk FALSE \
 --field="Score Board: ":chk "true" \
 --field="Game Synopsis: ":txt \
---colums=2
+--colums=2 --quoted-output
 ))
 
 if [ "$?" = "0" ]
@@ -145,23 +267,25 @@ if [ "$?" = "0" ]
 		then
 		echo "upload file"
 	fi
-	game_data_record=$($DIALOG $GuiName --text="<b>Verify entered data to avoid any mistake.</b>\n\n \
-	If you agree with these data, click \"<i>Insert</i>\" button.\n\n\n \
-	<i>Game image should be displayed on the left.</i>\n\n \
-	<small>	Or there was an error with upload/selection.</small>\n\n \
-	<b>Game Name: </b> <span color=\"blue\">\"${g_data[0]}\"</span>\n\n \
-	<b>Game Categorie: </b><span color=\"blue\">${g_data[1]}</span>\n\n \
-	<b>Game Website: </b><span color=\"blue\">"$g_http"</span>\n\n \
-	<b>Game Author: </b><span color=\"blue\">\"${g_data[4]}\"</span>\n\n \
-	<b>Game Editor: </b><span color=\"blue\">\"${g_data[0]}\"</span>\n\n \
-	<b>Game Owner(s) (separated with colon): </b><span color=\"blue\">\"${g_data[6]}\"</span>\n\n \
-	<b>And finally a little summary: </b><span color=\"blue\">\"${g_data[10]}\"</span>" \
-	--button="Insert":0 --button=Cancel:1 --image=${g_data[7]})
-	if [ "$?" = "0" ]
-		then
+# 	game_data_record=$($DIALOG $GuiName --text="<b>Verify entered data to avoid any mistake.</b>\n\n \
+# 	If you agree with these data, click \"<i>Insert</i>\" button.\n\n\n \
+# 	<i>Game image should be displayed on the left.</i>\n\n \
+# 	<small>	Or there was an error with upload/selection.</small>\n\n \
+# 	<b>Game Name: </b> <span color=\"blue\">\"${g_data[0]}\"</span>\n\n \
+# 	<b>Game Categorie: </b><span color=\"blue\">${g_data[1]}</span>\n\n \
+# 	<b>Game Website: </b><span color=\"blue\">"$g_http"</span>\n\n \
+# 	<b>Game Author: </b><span color=\"blue\">\"${g_data[4]}\"</span>\n\n \
+# 	<b>Game Editor: </b><span color=\"blue\">\"${g_data[0]}\"</span>\n\n \
+# 	<b>Game Owner(s) (separated with colon): </b><span color=\"blue\">\"${g_data[6]}\"</span>\n\n \
+# 	<b>And finally a little summary: </b><span color=\"blue\">\"${g_data[10]}\"</span>" \
+# 	--button="Insert":0 --button=Cancel:1 --image=${g_data[7]})
+# 	if [ "$?" = "0" ]
+# 		then
 		echo "on y va"
-	else exit 1
-	fi
+		sqlite3 $Db "insert into games (id,g_created,g_name,g_cat,g_website,g_author,g_editor,g_img,g_synopsis) \
+		values ( '001','CDATE',${g_data[0]},${g_data[1]},${g_data[3]},${g_data[4]},${g_data[5]},${g_data[7]},${g_data[8]} );"  || message error "Unable to record \"${g_data[*]}\" in \"$Db\""
+# 	else exit 1
+# 	fi
 else exit 1
 fi
 }
@@ -187,17 +311,18 @@ Please do not give all answers without child-level explanations!\n \
 If you're a beginner as I am feel free to participate to this small project.\n \
 Please contact me if you need help like \"where to start\"\n \
 Github repo: <a href=\"https://github.com/Mermouy/scoreus\">https://github.com/Mermouy/scoreus</a>\n" \
---button=Quit:1 --width=400 --height=280 --image="$scoreus_ok" --image-on-top
+--button=Quit:1 --width=400 --height=280 --image="$scoreus_img" --image-on-top
 }
 
 function welcome_ui() {
 $DIALOG $GuiName --form --text="<span size=\"xx-large\"><b><u>Welcome in Scoreus</u></b></span>\n\nChoose what you want to do: \n" \
---width=300 --height=200 --always-print-result --image="$scoreus_ok" \
---field="Add Play!gtk-ok":fbtn  "./$0 --addplay" \
---field="Add Player!gtk-ok":fbtn "./$0 --addplayer" \
---field="Add Game!gtk-ok":fbtn "./$0 --addgame" \
---field="Config!gtk-ok":fbtn "./$0 --config" \
---field="Statistics!gtk-ok":fbtn "./$0 --stats" \
+--width=300 --height=200 --always-print-result --image="$scoreus_img" \
+--field="Add Play!$scoreus_ok":fbtn  "./$0 --addplay" \
+--field="Add Player!$scoreus_ok":fbtn "./$0 --addplayer" \
+--field="Add Game!$scoreus_ok":fbtn "./$0 --addgame" \
+--field="Config!$scoreus_ok":fbtn "./$0 --config" \
+--field="Search Player!$scoreus_ok":fbtn "./$0 --search" \
+--field="Statistics!$scoreus_ok":fbtn "./$0 --stats" \
 --field="Help!gtk-help":fbtn "./$0 --help" \
 --field="About!gtk-help":fbtn "./$0 --about" \
 --button=Quit:1 --buttons-layout=spread --image-on-top
@@ -252,7 +377,11 @@ case $1 in
 		add_play_ui
 		;;
 	"--stats")
+		#stats_ui
 		stats_ui
+		;;
+	"--search")
+		search_ui
 		;;
 	"--about")
 		about_ui

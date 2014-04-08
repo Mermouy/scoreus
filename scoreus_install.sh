@@ -203,7 +203,8 @@ chk_dependances
 ### Install Scoreus
 #Install arch
 function install_arch() {
-	Folder_arch="images uploads/images/games uploads/images/avatars"
+# find directories to create, following archive arch
+	Folder_arch=`find . -type d ! -regex ".*/\..*" ! -name ".*" -printf "%p "  | sed -e 's|\./||g'`
 	for f in $Folder_arch
 	do
 		echo $f
@@ -217,9 +218,11 @@ function install_arch() {
 function init_db() {
 if [ ! -f "$Db" ]
 	then
+# Create database &
 # Defining my databse first table
-	p_table="CREATE TABLE players (id INTEGER PRIMARY KEY,p_created date DEFAULT CURRENT_TIMESTAMP, p_name TEXT REQUIRED, p_bio TEXT, p_avatar TEXT, p_website TEXT, p_email EMAIL);"
-	g_table="CREATE TABLE games (id INTEGER PRIMARY KEY,g_created date DEFAULT CURRENT_TIMESTAMP, g_name TEXT REQUIRED, g_synopsis TEXT, g_image TEXT, g_website TEXT);"
+	p_table="CREATE TABLE players (id integer primary key,p_created date, p_name varchar(30), p_avatar TEXT, p_website TEXT, p_email EMAIL, p_game_admin TEXT REQUIRED, p_players_admin TEXT REQUIRED, p_owned blob);"
+
+	g_table="CREATE TABLE games (id INTEGER PRIMARY KEY,g_created date DEFAULT CURRENT_TIMESTAMP, g_name TEXT REQUIRED, g_cat TEXT, g_website TEXT, g_author TEXT, g_editor TEXT, g_img TEXT, g_synopsis);"
 	echo "$p_table" > /tmp/tmpstructure
 	echo "$g_table" >>  /tmp/tmpstructure
 
@@ -255,7 +258,8 @@ fi
 }
 
 function install_files() {
-	ScorFiles="images/scoreus.png LICENSE README.md"
+	img_files=`find ./images/ -type f ! -regex ".*/\..*" ! -name ".*" ! -empty -printf "%p "`
+	ScorFiles="$img_files LICENSE README.md"
 	ScorExe="scoreus.sh"
 	for f in "$ScorFiles"
 		do
