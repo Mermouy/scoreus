@@ -1,35 +1,32 @@
 #!/bin/bash
-# +------------------------------------------------------------+
-# | MerMouY mermouy[at]gmail[dot]com
+License="
+# +------------------------------------------------------------------------------------------------------------+
 # |
-# | This program is free software; you can redistribute it and/or
-# | modify it under the terms of the GNU General Public License
-# | as published by the Free Software Foundation; either version
-# | 3 of the License, or (at your option) any later version.
+# |This program is free software: you can redistribute it and/or modify
+# |it under the terms of the GNU General Public License as published by
+# |the Free Software Foundation, either version 3 of the License, or
+# |(at your option) any later version.
 # |
-# | This program is distributed in the hope that it will be useful,
-# | but WITHOUT ANY WARRANTY; without even the implied warranty
-# | of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# | See the GNU General Public License for more details.
+# |This program is distributed in the hope that it will be useful,
+# |but WITHOUT ANY WARRANTY; without even the implied warranty of
+# |MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# |GNU General Public License for more details.
 # |
-# | You should have received a copy of the GNU General Public
-# | License along with this program; if not, write to the
-# | Free Software Foundation, Inc., 51 Franklin St,
-# | Fifth Floor, Boston, MA  02110-1301  USA
-# +------------------------------------------------------------+
-# Simple bash + yad application to record and stat your boardgames scoring sessions
-
-mini_changelog="Nothing works for now, just playing with yad widgets...
-slowly working on sqlite integration"
+# +----------------------------------------------------------------------------------------------------------------+"
+License_link="See <a href=\"http://www.gnu.org/licenses/gpl.html\">Gpl Official page</a>"
+git_address="https://github.com/Mermouy/scoreus"
+git_link="<a href=\"https://github.com/Mermouy/scoreus\">$git_address</a>"
+Summary="<b>Simple bash + yad application to record and stat your boardgames scoring sessions</b>\n\nThe project is on github and should take long to upgrade as I'm not a real developper...\nIf you are developper, I will be happy to learn advices from you but, please do not give all answers without <i>child-level explanations</i>!\nIf you're a beginner as I am feel free to participate to this small project.\nPlease contact me if you need help like \"where to start\"\nGithub repo: $git_link\n"
+mini_changelog="Nothing works for now, just playing with yad widgets... slowly working on sqlite integration"
 ## Variables
-Author="MerMouY"
-Licence="<a href=\"http://gpl3.org\">GPL 3</a>"
+Author="MerMouY [mermouy [at] gmail .com]"
+Licence="<a href=\"http://www.gnu.org/licenses/gpl.html\">Gpl Official page</a>"
 Version="0.0.1"
 AppName="Scoreus"
 # scoreus_error="$img_path/error.png"
 # scoreus_warning="$img_path/warning.png"
-Cat_list="Fast!Bit less than an hour!Between 1 and 2 Hours!Evening!All night long"
-Sub_cat_list="Cartes!Ouvriers!Management"
+g_cat_list="Fast!Bit less than an hour!Between 1 and 2 Hours!Evening!All night long"
+g_ub_cat_list="Cartes!Ouvriers!Management"
 Db_path="$HOME/.scoreus"
 img_path="$Db_path/images"
 scoreus_error="gtk-error"
@@ -43,7 +40,6 @@ Game_default="$Db_path/uploads/games/default"
 Player_default="$Db_path/uploads/images/avatars"
 GuiName="--title=Scoreus --center --window-icon=$scoreus_img --name=Scoreus --class=Scoreus --selectable-labels --image-path=\"$img_path\""
 CDATE=`date +"%Y-%m-%d-%H:%M:%S"`
-
 
 ### Functions
 
@@ -65,6 +61,51 @@ if [ $# -gt 1 ]
 else
 	$DIALOG --text="<span color=\"red\"><b>$1</b></span>" --image="$scoreus_error" --button=Quit $2
 fi
+}
+
+function bug_report()
+{
+if [ -n "$1" ]
+	then
+	b_report="$1"
+fi
+issue=$(echo "$b_report" | $DIALOG $GuiName --text-info \
+--text="Here is the error message if any has been generated, you fill/complete informations above to explain circumstances, diagnostic and eventually solution: " \
+--button=Cancel:1 --button=Send:0 --editable --width=800 --height=350)
+if [ "$?" != "0" ]
+	then
+	exit 0
+else
+	if [ -n "$issue" ]
+		then git_open "$issue"
+	else message error "Issue is empty...\nExiting..."
+	exit 0
+	fi
+fi
+}
+
+rawurlencode() {
+local string="${1}"
+local strlen=${#string}
+local encoded=""
+for (( pos=0 ; pos<strlen ; pos++ )); do
+	c=${string:$pos:1}
+	case "$c" in
+		[-_.~a-zA-Z0-9] )	o="${c}" ;;
+		*)						printf -v o '%%%02x' "'$c" ;;
+esac
+encoded+="${o}"
+done
+echo "${encoded}" # You can either set a return variable (FASTER)
+#REPLY="${encoded}"#+or echo the result (EASIER)... or both... :p
+}
+
+function git_open()
+{
+issue_text=$(rawurlencode "$1")
+git_link_issue=$(echo "$git_address a" | sed "s| a|/issues/new?title=Name_your_issue\&body=$issue_text|")
+xdg-open $git_link_issue
+exit 0
 }
 
 function add_player_ui()
@@ -232,7 +273,7 @@ echo "$mini_changelog" | $DIALOG $GuiName --title="Scoreus Add Play" --text="<bi
 
 function add_game_ui()
 {
-g_data=($($DIALOG $GuiName --title="Scoreus Add Game" --text="<span size=\"x-large\"><b>Add a new gmae to the database: </b></span>" \
+g_data=($($DIALOG $GuiName --title="Scoreus Add Game" --text="<span size=\"x-large\"><b>Add a new game to the database: </b></span>" \
 --form --always-print-result --separator=" " \
 --field="Game Name: " "Game Name" \
 --field="Game category: ":cb "$Cat_list" \
@@ -292,7 +333,9 @@ fi
 
 function config_ui()
 {
-$DIALOG $GuiName --title="Scoreus Config" --text="<big><b>Coming soon...</b></big>\n" --button=Quit:1
+$DIALOG $GuiName --title="Scoreus Config" --text="<big><b>Choose parameters here:</b></big>\n" \
+--form --button=Quit:1 \
+--field="Game Categories:"cbe "$g_cat" --field="g_sub_cat_list"
 }
 
 function help_ui()
@@ -302,16 +345,9 @@ $DIALOG $GuiName --title="Scoreus help" --text="What? You really need help for t
 
 function about_ui()
 {
-$DIALOG $GuiName --title="About Scoreus" --text="$AppName Version $Version is slowly and poorly developped by $Author\n \
-This is a simple bash script with easy widgets via yad or zenity to record your boardgames plays scores\n\n \
-<span color=\"green\">$mini_changelog</span>\n\n \
-The project is on github and should take long to upgrade as I'm not a real developper...\n \
-If you are developper, I will be happy to learn advices from you but,\n \
-Please do not give all answers without child-level explanations!\n \
-If you're a beginner as I am feel free to participate to this small project.\n \
-Please contact me if you need help like \"where to start\"\n \
-Github repo: <a href=\"https://github.com/Mermouy/scoreus\">https://github.com/Mermouy/scoreus</a>\n" \
---button=Quit:1 --width=400 --height=280 --image="$scoreus_img" --image-on-top
+echo -e "$License" | $DIALOG $GuiName --title="About Scoreus" --text-info --width=850 --height=600 --image="$scoreus_img" \
+--text="<b>$AppName</b>\n\nVersion $Version is slowly and poorly developped by <b>$Author</b>\nThis is a simple bash script with easy widgets via yad or zenity to record your boardgames plays scores\n\n$Summary\n\n<b>Mini changelog:\n\n<span color=\"green\"><tt>$mini_changelog</tt></span>\n\nLicense:</b>" \
+--dialog-sep  --button=Quit:1
 }
 
 function welcome_ui() {
@@ -325,10 +361,11 @@ $DIALOG $GuiName --form --text="<span size=\"xx-large\"><b><u>Welcome in Scoreus
 --field="Statistics!$scoreus_ok":fbtn "./$0 --stats" \
 --field="Help!gtk-help":fbtn "./$0 --help" \
 --field="About!gtk-help":fbtn "./$0 --about" \
---button=Quit:1 --buttons-layout=spread --image-on-top
-if [ "$?" = "1" ]
+--button=Quit:1 --button="Report bug":0 --buttons-layout=spread --image-on-top
+if [ "$?" ! = "0" ]
 	then
 	exit 1
+else bug_report
 fi
 }
 
